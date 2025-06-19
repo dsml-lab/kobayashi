@@ -10,3 +10,7 @@
 /data/
 /test_inference/
 /.ipynb_checkpoints/
+*.zip
+*.pdf
+*.txt
+*.png
