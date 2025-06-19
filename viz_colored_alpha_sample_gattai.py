@@ -377,7 +377,9 @@ def plot_label_changes_across_samples(
     for sample_dir in sample_dirs:
         # sample_dir 内の fig_and_log フォルダを参照
         fig_and_log_path = os.path.join(sample_dir, "fig_and_log")
-        csv_file = os.path.join(fig_and_log_path, f"label_change_scores_alpha_{target}.csv")
+        csv_file = os.path.join(fig_and_log_path, f"label_change_scores_alpha.csv")
+        #csv_file = os.path.join(fig_and_log_path, f"label_change_scores_alpha_{target}.csv")
+
         if os.path.exists(csv_file):
             try:
                 df = pd.read_csv(csv_file).sort_values(by="epoch")
@@ -460,8 +462,8 @@ if __name__ == "__main__":
     # # main3_samples(sample_dirs, base_output_dir, targets=["combined"], epoch_start=60, epoch_end=140)
     # #main3_samples(sample_dirs, base_output_dir, targets=["combined"], epoch_start=140, epoch_end=1000)
 
-    output_dir = "/workspace/miru_vizualize/sigma_0/C_C/stablity"
-    output_filename = "sample_wise_label_change.svg"
+    output_dir = "/workspace/alpha_test/cifar10/0.2"
+    output_filename = "64_sample_wise_label_change.svg"
     output_path = os.path.join(output_dir, output_filename)
 
     # # 必要ならディレクトリを作成
