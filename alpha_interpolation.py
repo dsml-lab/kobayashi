@@ -281,10 +281,19 @@ def get_highlight_labels_from_path(data_dir):
     label1, label2 = map(int, label_dir.split("_"))
     return label1, label2
 
-def generate_alpha_probabilities_gif(data_dir, output_path, targets='combined'):
+def generate_alpha_probabilities_gif(data_dir, output_path, targets='combined', epoch_stride=1,
+                                     start_epoch=1, end_epoch=300):
     """
     指定した data_dir 内の epoch_*.csv を読み込み、alpha と予測確率の推移を GIF 保存する。
     ハイライトはディレクトリ名にあるラベル2つ（青・赤）に基づく。
+    
+    Parameters:
+    - data_dir: CSVが入っているディレクトリ
+    - output_path: 出力するGIFのパス
+    - targets: ラベル指定（未使用）
+    - epoch_stride: 何エポックごとに描画するか（例：5なら5エポックごと）
+    - start_epoch: 開始エポック（Noneなら最初のエポック）
+    - end_epoch: 終了エポック（Noneなら最後のエポック）
     """
     csv_files = sorted(glob.glob(os.path.join(data_dir, "epoch_*.csv")))
     if not csv_files:
@@ -296,9 +305,19 @@ def generate_alpha_probabilities_gif(data_dir, output_path, targets='combined'):
         epoch = int(os.path.basename(f).split("_")[1].split(".")[0])
         data[epoch] = pd.read_csv(f)
 
-    epochs = sorted(data.keys())
-    alpha_values = data[epochs[0]]['alpha']
+    all_epochs = sorted(data.keys())
 
+    # 指定された範囲でエポックをフィルター
+    filtered_epochs = [e for e in all_epochs
+                       if (start_epoch is None or e >= start_epoch) and
+                          (end_epoch is None or e <= end_epoch)]
+
+    epochs = filtered_epochs[::epoch_stride]
+    if not epochs:
+        print("[!] No epochs match the given range and stride.")
+        return
+
+    alpha_values = data[epochs[0]]['alpha']
     label1, label2 = get_highlight_labels_from_path(data_dir)
 
     fig, ax = plt.subplots(figsize=(8, 6), dpi=150)
@@ -344,6 +363,7 @@ def generate_alpha_probabilities_gif(data_dir, output_path, targets='combined'):
     anim.save(output_path, writer=PillowWriter(fps=8))
     plt.close()
     print(f"[✓] Saved alpha probability GIF to {output_path}")
+
 def get_noise_info(dataset):
     """
     TensorDatasetなどにラップされている場合からnoise_infoを推定する。
@@ -579,7 +599,7 @@ def save_pair_log(pairs, args):
     df.to_csv(save_path, index=False)
     print(f"[✓] Pair log saved to: {save_path}")
 def get_pair_save_dir(base_dir, args, pair_id, matched_label, query_label):
-    pair_str = f"pair{pair_id:04d}"
+    pair_str = f"pair{pair_id}"
     sub_dir = f"{matched_label}_{query_label}"
     csv_dir = Path(base_dir) / args.dataset / str(args.label_noise_rate) / str(args.model_width) / args.mode / pair_str / sub_dir / "csv"
     fig_and_log_dir = csv_dir.parent / "fig_and_log"
@@ -661,17 +681,18 @@ def main():
             noise_info = get_noise_info(train_dataset)
 
         print('Selecting sample pairs...')
-        n_pairs = 2
-        pairs = find_random_n_pairs_by_mode(
-            x_train_noisy, noise_info, y_original_train,
-            n=n_pairs,
-            distance_metric=args.distance_metric,
-            mode=args.mode
-        )
+        n_pairs = 100
+        # pairs = find_random_n_pairs_by_mode(
+        #     x_train_noisy, noise_info, y_original_train,
+        #     n=n_pairs,
+        #     distance_metric=args.distance_metric,
+        #     mode=args.mode
+        # )
+       
+        pairs = load_saved_pairs_by_mode(args, base_dir="alpha_test")
 
-        save_pair_log(pairs, args)
+        # save_pair_log(pairs, args)
         print(f"{len(pairs)} pairs selected.")
-
         model = load_models(in_channels, args, imagesize, num_classes).to(device)
         base_save_dir = os.path.join("save_model", args.dataset, f"noise_{args.label_noise_rate}", experiment_name)
 
@@ -697,9 +718,10 @@ def main():
             save_tensor_image(x_query, fig_and_log_dir / "query.png", dataset=args.dataset, clean_label=y_query.item(), noisy_label=y_train_noisy[query_idx].item())
             save_tensor_image(x_matched, fig_and_log_dir / "matched.png", dataset=args.dataset, clean_label=y_matched.item(), noisy_label=y_train_noisy[matched_idx].item())
 
-            for epoch in range(10):
+            for epoch in range(args.epoch + 2):
                 model_path = os.path.join(base_save_dir, f"model_epoch_{epoch}.pth")
                 if not os.path.exists(model_path):
+                    print(model_path)
                     print(f"  [!] Skip epoch {epoch} (no model found)")
                     continue
 

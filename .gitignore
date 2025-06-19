@@ -1,2 +1,12 @@
 # alphatest フォルダを無視
-/alphatest/
+/alpha_test/
+/wandb/
+/__pycache__/
+/compare_test/
+/cen_distance/
+/vizualize/
+/save_model/
+/project/
+/data/
+/test_inference/
+/.ipynb_checkpoints/

@@ -1,0 +1,13 @@
+python viz_loss_eval_dis.py \
+    --gpu 1 \
+    --model_path /workspace/save_model/EMNIST/cnn_5layers_width1_emnist_digits_lr0.01_batch_size256_epoch2000_LabelNoiseRate0.5_Optimsgd_momentum0.0 \
+    --model cnn_5layers \
+    --model_width 1 \
+    --epoch 175 \
+    --m 100 \
+    --output_txt high_loss_indices.txt \
+    --data_path /workspace/data/EMNIST/EMNIST_0.5 \
+    --batch_size 256 \
+    --output_image_hist loss_histogram_0.5_epoch_175.png \
+    --output_image_scatter loss_vs_distance_0.5_epoch_175.png \
+    --hist_bins 100
