@@ -125,283 +125,241 @@ class BalancedBatchSampler(Sampler):
         return len(self.clean_indices) // self.num_samples_per_class
 
 def load_datasets(dataset, target, gray_scale, args):
+    """Load dataset with optional grayscale conversion.
+
+    Parameters
+    ----------
+    dataset : str
+        Dataset name.
+    target : str
+        Target type for special datasets such as ``colored_emnist``.
+    gray_scale : bool
+        Convert images to gray scale when ``True``.
+    args : argparse.Namespace
+        Additional command line arguments.
+
+    Returns
+    -------
+    tuple
+        ``(train_dataset, test_dataset, imagesize, num_classes, in_channels)``
     """
-    Load the specified dataset and apply transformations based on the dataset type and grayscale option.
-    
-    Args:
-        dataset (str): The name of the dataset to load.
-        target (str): Target type for certain datasets.
-        gray_scale (bool): Flag indicating whether to convert the images to grayscale.
-        args (argparse.Namespace): Parsed command-line arguments.
-        
-    Returns:
-        tuple: A tuple containing the train dataset, test dataset, image size, number of classes, and number of input channels.
-    """
-    if dataset == "mnist":
+
+    dataset = dataset.lower()
+
+    def _load_mnist(_, __, ___):
         transform = transforms.Compose([
             transforms.ToTensor(),
             transforms.Resize((32, 32)),
             transforms.Normalize((0.1307,), (0.3081,))
         ])
-        train_dataset = datasets.MNIST(root='./data', train=True, download=True, transform=transform)
-        test_dataset = datasets.MNIST(root='./data', train=False, download=True, transform=transform)
-        imagesize = (32, 32)
-        num_classes = 10
-        in_channels = 1
-    elif dataset == "emnist":
+        train_ds = datasets.MNIST(root='./data', train=True, download=True, transform=transform)
+        test_ds = datasets.MNIST(root='./data', train=False, download=True, transform=transform)
+        return train_ds, test_ds, (32, 32), 10, 1
+
+    def _load_emnist(_, __, ___):
         transform = transforms.Compose([
             transforms.ToTensor(),
             transforms.Resize((32, 32)),
             transforms.Normalize((0.1307,), (0.3081,))
         ])
-        train_dataset = datasets.EMNIST(root='./data', split='balanced', train=True, download=True, transform=transform)
-        test_dataset = datasets.EMNIST(root='./data', split='balanced', train=False, download=True, transform=transform)
-        imagesize = (32, 32)
-        num_classes = 47
-        in_channels = 1
-    elif dataset == "emnist_digits":
+        train_ds = datasets.EMNIST(root='./data', split='balanced', train=True, download=True, transform=transform)
+        test_ds = datasets.EMNIST(root='./data', split='balanced', train=False, download=True, transform=transform)
+        return train_ds, test_ds, (32, 32), 47, 1
+
+    def _load_emnist_digits(_, __, ___):
         emnist_path = './data/EMNIST'
+
         def load_gz_file(file_path, is_image=True):
             with gzip.open(file_path, 'rb') as f:
                 if is_image:
                     return np.frombuffer(f.read(), dtype=np.uint8, offset=16).reshape(-1, 28, 28)
-                else:
-                    return np.frombuffer(f.read(), dtype=np.uint8, offset=8)
+                return np.frombuffer(f.read(), dtype=np.uint8, offset=8)
 
         x_train = load_gz_file(os.path.join(emnist_path, 'emnist-digits-train-images-idx3-ubyte.gz'))
         y_train = load_gz_file(os.path.join(emnist_path, 'emnist-digits-train-labels-idx1-ubyte.gz'), is_image=False)
         x_test = load_gz_file(os.path.join(emnist_path, 'emnist-digits-test-images-idx3-ubyte.gz'))
         y_test = load_gz_file(os.path.join(emnist_path, 'emnist-digits-test-labels-idx1-ubyte.gz'), is_image=False)
-        
-        # Transformation
+
         transform = transforms.Compose([
             transforms.ToPILImage(),
             transforms.Resize((32, 32)),
             transforms.ToTensor()
         ])
 
-        # Apply transformation
         x_train_tensor = apply_transform(x_train, transform)
         x_test_tensor = apply_transform(x_test, transform)
 
         y_train_tensor = torch.tensor(y_train, dtype=torch.long)
         y_test_tensor = torch.tensor(y_test, dtype=torch.long)
 
-        train_dataset = TensorDataset(x_train_tensor, y_train_tensor)
-        test_dataset = TensorDataset(x_test_tensor, y_test_tensor)
+        train_ds = TensorDataset(x_train_tensor, y_train_tensor)
+        test_ds = TensorDataset(x_test_tensor, y_test_tensor)
+        return train_ds, test_ds, (32, 32), 10, 1
 
-        num_classes = 10
-        in_channels = 1
-        imagesize = (32, 32)
-    elif dataset == "colored_emnist":
+    def _load_colored_emnist(target_local, _, args_local):
         transform = transforms.Compose([
             transforms.ToPILImage(),
             transforms.Resize((32, 32)),
             transforms.ToTensor(),
             transforms.Normalize((0.1307,), (0.3081,))
         ])
-        
-        if target == 'color':
-            x_train = np.load('data/colored_EMNIST/x_train_colored.npy')
-            y_train_colors = np.load('data/colored_EMNIST/y_train_colors.npy')
-            x_test = np.load('data/colored_EMNIST/x_test_colored.npy')
-            y_test_colors = np.load('data/colored_EMNIST/y_test_colors.npy')
-            
-            x_train_tensor = apply_transform(x_train, transform)
-            x_test_tensor = apply_transform(x_test, transform)
-            
-            y_train_tensor = torch.tensor(y_train_colors, dtype=torch.long)
-            y_test_tensor = torch.tensor(y_test_colors, dtype=torch.long)
-            
-            train_dataset = TensorDataset(x_train_tensor, y_train_tensor)
-            test_dataset = TensorDataset(x_test_tensor, y_test_tensor)
-        
-        elif target == 'digit':
-            x_train = np.load('data/colored_EMNIST/x_train_colored.npy')
-            y_train_digits = np.load('data/colored_EMNIST/y_train_digits.npy')
-            x_test = np.load('data/colored_EMNIST/x_test_colored.npy')
-            y_test_digits = np.load('data/colored_EMNIST/y_test_digits.npy')
-            
-            x_train_tensor = apply_transform(x_train, transform)
-            x_test_tensor = apply_transform(x_test, transform)
-            
-            y_train_tensor = torch.tensor(y_train_digits, dtype=torch.long)
-            y_test_tensor = torch.tensor(y_test_digits, dtype=torch.long)
-            
-            train_dataset = TensorDataset(x_train_tensor, y_train_tensor)
-            test_dataset = TensorDataset(x_test_tensor, y_test_tensor)
-        
-        elif target == 'combined':
-            x_train = np.load('data/colored_EMNIST/x_train_colored.npy')
-            y_train_combined = np.load('data/colored_EMNIST/y_train_combined.npy')
-            x_test = np.load('data/colored_EMNIST/x_test_colored.npy')
-            y_test_combined = np.load('data/colored_EMNIST/y_test_combined.npy')
-            
-            x_train_tensor = apply_transform(x_train, transform)
-            x_test_tensor = apply_transform(x_test, transform)
-            
-            y_train_tensor = torch.tensor(y_train_combined, dtype=torch.long)
-            y_test_tensor = torch.tensor(y_test_combined, dtype=torch.long)
-            
-            train_dataset = TensorDataset(x_train_tensor, y_train_tensor)
-            test_dataset = TensorDataset(x_test_tensor, y_test_tensor)
-        
-        num_classes = 10 if target in ['color', 'digit'] else 100
-        in_channels = 3
-        imagesize = (32, 32)
-    elif dataset == "distribution_colored_emnist":
-        seed = args.fix_seed
-        variance = args.variance
-        correlation = args.correlation
-        
+
+        x_train = np.load('data/colored_EMNIST/x_train_colored.npy')
+        x_test = np.load('data/colored_EMNIST/x_test_colored.npy')
+
+        if target_local == 'color':
+            y_train = np.load('data/colored_EMNIST/y_train_colors.npy')
+            y_test = np.load('data/colored_EMNIST/y_test_colors.npy')
+        elif target_local == 'digit':
+            y_train = np.load('data/colored_EMNIST/y_train_digits.npy')
+            y_test = np.load('data/colored_EMNIST/y_test_digits.npy')
+        else:
+            y_train = np.load('data/colored_EMNIST/y_train_combined.npy')
+            y_test = np.load('data/colored_EMNIST/y_test_combined.npy')
+
+        x_train_tensor = apply_transform(x_train, transform)
+        x_test_tensor = apply_transform(x_test, transform)
+
+        y_train_tensor = torch.tensor(y_train, dtype=torch.long)
+        y_test_tensor = torch.tensor(y_test, dtype=torch.long)
+
+        train_ds = TensorDataset(x_train_tensor, y_train_tensor)
+        test_ds = TensorDataset(x_test_tensor, y_test_tensor)
+
+        num_classes = 10 if target_local in ['color', 'digit'] else 100
+        return train_ds, test_ds, (32, 32), num_classes, 3
+
+    def _load_distribution_colored_emnist(target_local, _, args_local):
+        seed = args_local.fix_seed
+        variance = args_local.variance
+        correlation = args_local.correlation
+
         transform = transforms.Compose([
             transforms.ToPILImage(),
             transforms.Resize((32, 32)),
             transforms.ToTensor(),
             transforms.Normalize((0.1307,), (0.3081,))
         ])
-        
-        if target == 'color':
-            base_path = f'data/distribution_colored_EMNIST_Seed{seed}_Var{variance}_Corr{correlation}'
-            x_train = np.load(os.path.join(base_path, 'x_train_colored.npy'))
-            y_train_colors = np.load(os.path.join(base_path, 'y_train_colors.npy'))
-            x_test = np.load(os.path.join(base_path, 'x_test_colored.npy'))
-            y_test_colors = np.load(os.path.join(base_path, 'y_test_colors.npy'))
-            
-            x_train_tensor = apply_transform(x_train, transform)
-            x_test_tensor = apply_transform(x_test, transform)
-            
-            y_train_tensor = torch.tensor(y_train_colors, dtype=torch.long)
-            y_test_tensor = torch.tensor(y_test_colors, dtype=torch.long)
-            
-            train_dataset = TensorDataset(x_train_tensor, y_train_tensor)
-            test_dataset = TensorDataset(x_test_tensor, y_test_tensor)
-        
-        elif target == 'digit':
-            base_path = f'data/distribution_colored_EMNIST_Seed{seed}_Var{variance}_Corr{correlation}'
-            x_train = np.load(os.path.join(base_path, 'x_train_colored.npy'))
-            y_train_digits = np.load(os.path.join(base_path, 'y_train_digits.npy'))
-            x_test = np.load(os.path.join(base_path, 'x_test_colored.npy'))
-            y_test_digits = np.load(os.path.join(base_path, 'y_test_digits.npy'))
-            
-            x_train_tensor = apply_transform(x_train, transform)
-            x_test_tensor = apply_transform(x_test, transform)
-            
-            y_train_tensor = torch.tensor(y_train_digits, dtype=torch.long)
-            y_test_tensor = torch.tensor(y_test_digits, dtype=torch.long)
-            
-            train_dataset = TensorDataset(x_train_tensor, y_train_tensor)
-            test_dataset = TensorDataset(x_test_tensor, y_test_tensor)
-        
-        elif target == 'combined':
-            base_path = f'data/distribution_colored_EMNIST_Seed42_Var{variance}_Corr{correlation}'
-            x_train = np.load(os.path.join(base_path, 'x_train_colored.npy'))
-            y_train_combined = np.load(os.path.join(base_path, 'y_train_combined.npy'))
-            x_test = np.load(os.path.join(base_path, 'x_test_colored.npy'))
-            y_test_combined = np.load(os.path.join(base_path, 'y_test_combined.npy'))
-            
-            x_train_tensor = apply_transform(x_train, transform)
-            x_test_tensor = apply_transform(x_test, transform)
-            
-            y_train_tensor = torch.tensor(y_train_combined, dtype=torch.long)
-            y_test_tensor = torch.tensor(y_test_combined, dtype=torch.long)
-            
-            train_dataset = TensorDataset(x_train_tensor, y_train_tensor)
-            test_dataset = TensorDataset(x_test_tensor, y_test_tensor)
-            print(base_path)
-    
-        num_classes = 10 if target in ['color', 'digit'] else 100
-        in_channels = 3
-        imagesize = (32, 32)
-    elif dataset == "cifar10":
+
+        base_path = f'data/distribution_colored_EMNIST_Seed{seed}_Var{variance}_Corr{correlation}'
+        x_train = np.load(os.path.join(base_path, 'x_train_colored.npy'))
+        x_test = np.load(os.path.join(base_path, 'x_test_colored.npy'))
+
+        if target_local == 'color':
+            y_train = np.load(os.path.join(base_path, 'y_train_colors.npy'))
+            y_test = np.load(os.path.join(base_path, 'y_test_colors.npy'))
+        elif target_local == 'digit':
+            y_train = np.load(os.path.join(base_path, 'y_train_digits.npy'))
+            y_test = np.load(os.path.join(base_path, 'y_test_digits.npy'))
+        else:
+            y_train = np.load(os.path.join(base_path, 'y_train_combined.npy'))
+            y_test = np.load(os.path.join(base_path, 'y_test_combined.npy'))
+
+        x_train_tensor = apply_transform(x_train, transform)
+        x_test_tensor = apply_transform(x_test, transform)
+
+        y_train_tensor = torch.tensor(y_train, dtype=torch.long)
+        y_test_tensor = torch.tensor(y_test, dtype=torch.long)
+
+        train_ds = TensorDataset(x_train_tensor, y_train_tensor)
+        test_ds = TensorDataset(x_test_tensor, y_test_tensor)
+
+        num_classes = 10 if target_local in ['color', 'digit'] else 100
+        return train_ds, test_ds, (32, 32), num_classes, 3
+
+    def _load_cifar10(_, __, ___):
         transform = transforms.Compose([
             transforms.RandomCrop(32, padding=4),
             transforms.RandomHorizontalFlip(),
             transforms.ToTensor(),
-            transforms.Normalize((0.4914, 0.4822, 0.4465), 
-                                 (0.2023, 0.1994, 0.2010))
+            transforms.Normalize((0.4914, 0.4822, 0.4465), (0.2023, 0.1994, 0.2010))
         ])
-        train_dataset = datasets.CIFAR10(root='./data', train=True, download=True, transform=transform)
-        test_dataset = datasets.CIFAR10(root='./data', train=False, download=True, transform=transform)
-        imagesize = (32, 32)
-        num_classes = 10
-        in_channels = 3
-    elif dataset == "cifar100":
+        train_ds = datasets.CIFAR10(root='./data', train=True, download=True, transform=transform)
+        test_ds = datasets.CIFAR10(root='./data', train=False, download=True, transform=transform)
+        return train_ds, test_ds, (32, 32), 10, 3
+
+    def _load_cifar100(_, __, ___):
         transform = transforms.Compose([
             transforms.RandomCrop(32, padding=4),
             transforms.RandomHorizontalFlip(),
             transforms.ToTensor(),
-            transforms.Normalize((0.5071, 0.4867, 0.4408), 
-                                 (0.2675, 0.2565, 0.2761))
+            transforms.Normalize((0.5071, 0.4867, 0.4408), (0.2675, 0.2565, 0.2761))
         ])
-        train_dataset = datasets.CIFAR100(root='./data', train=True, download=True, transform=transform)
-        test_dataset = datasets.CIFAR100(root='./data', train=False, download=True, transform=transform)
-        imagesize = (32, 32)
-        num_classes = 100
-        in_channels = 3
-    elif dataset == "tinyImageNet":
+        train_ds = datasets.CIFAR100(root='./data', train=True, download=True, transform=transform)
+        test_ds = datasets.CIFAR100(root='./data', train=False, download=True, transform=transform)
+        return train_ds, test_ds, (32, 32), 100, 3
+
+    def _load_tiny_imagenet(_, __, ___):
         transform = transforms.Compose([
             transforms.RandomCrop(64, padding=4),
             transforms.RandomHorizontalFlip(),
             transforms.ToTensor(),
-            transforms.Normalize((0.4802, 0.4481, 0.3975), 
-                                 (0.2302, 0.2265, 0.2262))
+            transforms.Normalize((0.4802, 0.4481, 0.3975), (0.2302, 0.2265, 0.2262))
         ])
-        train_dataset = datasets.ImageFolder(root='./data/tiny-imagenet-200/train', transform=transform)
-        test_dataset = datasets.ImageFolder(root='./data/tiny-imagenet-200/val', transform=transform)
-        imagesize = (64, 64)
-        num_classes = 200
-        in_channels = 3
-    elif dataset == "distribution_to_normal":
-        # Similar to 'distribution_colored_emnist' but with different paths
-        seed = args.fix_seed
-        variance = args.variance
-        correlation = args.correlation
-        
+        train_ds = datasets.ImageFolder(root='./data/tiny-imagenet-200/train', transform=transform)
+        test_ds = datasets.ImageFolder(root='./data/tiny-imagenet-200/val', transform=transform)
+        return train_ds, test_ds, (64, 64), 200, 3
+
+    def _load_distribution_to_normal(target_local, _, args_local):
+        seed = args_local.fix_seed
+        variance = args_local.variance
+        correlation = args_local.correlation
+
         transform = transforms.Compose([
             transforms.ToPILImage(),
             transforms.Resize((32, 32)),
             transforms.ToTensor(),
             transforms.Normalize((0.1307,), (0.3081,))
         ])
-        
-        if target == 'combined':
-            base_path = f'data/distribution_colored_EMNIST_Seed{seed}_Var{variance}_Corr{correlation}'
-            x_train = np.load(os.path.join(base_path, 'x_train_colored.npy'))
-            y_train_combined = np.load(os.path.join(base_path, 'y_train_combined.npy'))
-            x_test = np.load('data/colored_EMNIST/x_test_colored.npy')
-            y_test_combined = np.load('data/colored_EMNIST/y_test_combined.npy')
-            
-            x_train_tensor = apply_transform(x_train, transform)
-            x_test_tensor = apply_transform(x_test, transform)
-            
-            y_train_tensor = torch.tensor(y_train_combined, dtype=torch.long)
-            y_test_tensor = torch.tensor(y_test_combined, dtype=torch.long)
-            
-            train_dataset = TensorDataset(x_train_tensor, y_train_tensor)
-            test_dataset = TensorDataset(x_test_tensor, y_test_tensor)
-    
-        num_classes = 10 if target in ['color', 'digit'] else 100
-        in_channels = 3
-        imagesize = (32, 32)
-    else:
-        raise ValueError("Invalid dataset name")
-        
+
+        base_path = f'data/distribution_colored_EMNIST_Seed{seed}_Var{variance}_Corr{correlation}'
+        x_train = np.load(os.path.join(base_path, 'x_train_colored.npy'))
+        y_train = np.load(os.path.join(base_path, 'y_train_combined.npy'))
+        x_test = np.load('data/colored_EMNIST/x_test_colored.npy')
+        y_test = np.load('data/colored_EMNIST/y_test_combined.npy')
+
+        x_train_tensor = apply_transform(x_train, transform)
+        x_test_tensor = apply_transform(x_test, transform)
+
+        y_train_tensor = torch.tensor(y_train, dtype=torch.long)
+        y_test_tensor = torch.tensor(y_test, dtype=torch.long)
+
+        train_ds = TensorDataset(x_train_tensor, y_train_tensor)
+        test_ds = TensorDataset(x_test_tensor, y_test_tensor)
+        return train_ds, test_ds, (32, 32), 100, 3
+
+    loader_map = {
+        'mnist': _load_mnist,
+        'emnist': _load_emnist,
+        'emnist_digits': _load_emnist_digits,
+        'colored_emnist': _load_colored_emnist,
+        'distribution_colored_emnist': _load_distribution_colored_emnist,
+        'cifar10': _load_cifar10,
+        'cifar100': _load_cifar100,
+        'tinyimagenet': _load_tiny_imagenet,
+        'distribution_to_normal': _load_distribution_to_normal,
+    }
+
+    if dataset not in loader_map:
+        raise ValueError(f"Invalid dataset name: {dataset}")
+
+    train_dataset, test_dataset, imagesize, num_classes, in_channels = loader_map[dataset](target, gray_scale, args)
+
     if gray_scale:
-        transform = transforms.Compose([
+        gs_transform = transforms.Compose([
             transforms.Grayscale(),
             transforms.ToTensor(),
             transforms.Normalize((0.1307,), (0.3081,))
         ])
         if isinstance(train_dataset, TensorDataset):
             train_dataset = TensorDataset(*[
-                transform(img) for img in train_dataset.tensors[0]
+                gs_transform(img) for img in train_dataset.tensors[0]
             ], train_dataset.tensors[1])
         if isinstance(test_dataset, TensorDataset):
             test_dataset = TensorDataset(*[
-                transform(img) for img in test_dataset.tensors[0]
+                gs_transform(img) for img in test_dataset.tensors[0]
             ], test_dataset.tensors[1])
-    
+
     return train_dataset, test_dataset, imagesize, num_classes, in_channels
 
 
